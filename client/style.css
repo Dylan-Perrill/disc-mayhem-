@@ -51,6 +51,30 @@ canvas#game {
 
 .hidden { display: none !important; }
 
+/* ----------------------------------------------------- audio toggle btn ---
+   Lives outside #ui (on <body>) so it's always clickable. */
+.audio-toggle {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 50;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--glass-border);
+  background: var(--glass);
+  color: #fff;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+  backdrop-filter: blur(6px);
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+.audio-toggle:hover { transform: scale(1.1); background: rgba(40, 46, 70, 0.72); }
+.audio-toggle:active { transform: scale(0.94); }
+
 /* -------------------------------------------------------------- screens */
 .screen {
   position: absolute;

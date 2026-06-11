@@ -95,6 +95,18 @@ export class GameController extends Emitter {
     return this.course.holes[this.holeIndex];
   }
 
+  // Live info about the player's airborne disc (for the flight whoosh sound).
+  // null unless a disc is currently flying.
+  get activeDisc() {
+    const d = this._disc;
+    if (!d || d.state !== 'flying') return null;
+    return {
+      type: d.type,
+      speed: Math.hypot(d.vel.x, d.vel.y, d.vel.z),
+      height: d.pos.y - this.course.heightAt(d.pos.x, d.pos.z),
+    };
+  }
+
   get holeElapsedMs() {
     return this._state === 'done' ? 0 : performance.now() - this._holeStart;
   }

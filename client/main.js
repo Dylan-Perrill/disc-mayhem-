@@ -12,6 +12,7 @@ import { createCharacter } from './src/models/character.js';
 import { createDiscVisual } from './src/models/discs.js';
 import { createEffects } from './src/models/effects.js';
 import { createUI } from './src/ui/ui.js';
+import { createAudio } from './src/audio/audio.js';
 import { NetClient } from './src/net/client.js';
 import {
   DEFAULT_CUSTOMIZATION,
@@ -39,8 +40,26 @@ window.addEventListener('resize', resize);
 resize();
 
 const ui = createUI(document.getElementById('ui'));
+const audio = createAudio();
+audio.mountToggle(document.body);
 const followCam = new FollowCamera(camera, canvas);
 const flickInput = new FlickInput(canvas);
+
+// Browsers block audio until a user gesture; resume + start menu music on the
+// first interaction, and turn any button press into a UI click sound.
+let audioStarted = false;
+function kickAudio() {
+  audio.unlock();
+  if (!audioStarted) {
+    audioStarted = true;
+    audio.playMusic(uiMode === 'game' ? 'game' : 'menu');
+  }
+}
+window.addEventListener('pointerdown', kickAudio, { capture: true });
+window.addEventListener('keydown', kickAudio, { capture: true });
+document.addEventListener('click', (e) => {
+  if (e.target.closest('button:not(.audio-toggle)')) audio.sfx.click();
+}, { capture: true });
 
 let customization = loadCustomization();
 let uiMode = 'menu'; // menu | customize | lobby | game | results
@@ -136,6 +155,7 @@ function randomSeed() {
 
 function destroyGame() {
   if (!game) return;
+  audio.flightStop();
   flickInput.disable();
   if (game.stateInterval) clearInterval(game.stateInterval);
   for (const t of game.timers) clearTimeout(t);
@@ -194,6 +214,7 @@ function startGame(seed, multi) {
   wireGameEvents();
   ui.showHUD(gc.bag.map((s) => ({ ...s })));
   uiMode = 'game';
+  audio.playMusic('game');
   gc.startRound(0);
   ui.hud.setBag(gc.bag);
 
@@ -221,6 +242,7 @@ function wireGameEvents() {
     ui.hud.setHole(holeIndex, par);
     ui.hud.setStrokes(0, gc.totalStrokes);
     ui.hud.showMessage(`HOLE ${holeIndex + 1} — PAR ${par}`, 1600);
+    audio.sfx.holeStart();
   });
 
   gc.on('stroke', ({ holeStrokes, totalStrokes }) => ui.hud.setStrokes(holeStrokes, totalStrokes));
@@ -228,19 +250,25 @@ function wireGameEvents() {
   gc.on('bag-change', () => ui.hud.setBag(gc.bag));
 
   gc.on('throw', (payload) => {
+    audio.sfx.throw(payload.throwParams?.power);
     if (game.multi && net) net.sendThrow(payload);
   });
 
   gc.on('disc-event', ({ kind }) => {
-    if (kind === 'treeHit') ui.hud.showMessage('BONK!', 800);
-    if (kind === 'water') ui.hud.showMessage('SPLASH! +1', 1300);
+    if (kind === 'treeHit') { ui.hud.showMessage('BONK!', 800); audio.sfx.bonk(); }
+    if (kind === 'water') { ui.hud.showMessage('SPLASH! +1', 1300); audio.sfx.splash(); }
+    if (kind === 'chains') audio.sfx.chains();
+    if (kind === 'landed') audio.sfx.land();
   });
+
+  gc.on('knocked-back', () => audio.sfx.knockback());
 
   gc.on('opponent-hit', ({ playerId, discType }) => {
     if (discType !== 'blade') return;
     const victim = game.remotes.get(playerId);
     const name = victim ? victim.profile.name : 'someone';
     ui.hud.showMessage(`KILLED ${name}!`, 1600);
+    audio.sfx.bladeKill();
     if (victim) {
       game.effects.poof(victim.rig.group.position);
       victim.rig.poof();
@@ -250,6 +278,7 @@ function wireGameEvents() {
   });
 
   gc.on('bomb-landed', ({ pos, radius }) => {
+    audio.sfx.bomb();
     applyBombWorld(pos, radius);
     if (game.multi && net) net.sendEvent('bomb', { pos, radius });
   });
@@ -257,6 +286,7 @@ function wireGameEvents() {
   gc.on('holed', ({ holeIndex, strokes, timeMs }) => {
     const par = game.course.holes[holeIndex].par;
     ui.hud.showMessage(scoreName(strokes, par), 2000);
+    audio.sfx.holed(strokes, par);
     game.soloCard.holes[holeIndex].strokes = strokes;
     if (game.multi && net) {
       net.sendHoleDone(holeIndex, strokes, timeMs);
@@ -272,6 +302,7 @@ function wireGameEvents() {
       const totalStrokes = scorecard.reduce((a, h) => a + (h?.strokes || 0), 0);
       const totalTimeMs = scorecard.reduce((a, h) => a + (h?.timeMs || 0), 0);
       uiMode = 'results';
+      audio.playMusic('menu');
       ui.showResults([
         { rank: 1, name: customization.name, totalStrokes, totalTimeMs, you: true },
       ]);
@@ -409,6 +440,7 @@ function maybeShowMultiResults() {
     .sort((a, b) => a.totalStrokes - b.totalStrokes || a.totalTimeMs - b.totalTimeMs);
   sorted.forEach((r, i) => (r.rank = i + 1));
   uiMode = 'results';
+  audio.playMusic('menu');
   ui.showResults(sorted);
 }
 
@@ -461,6 +493,7 @@ async function ensureNet() {
       if (data?.victimId === client.id) {
         if (game.gc.killedByOpponent()) {
           ui.hud.showMessage(`KILLED by ${fromName}! +1`, 2000);
+          audio.sfx.death();
         }
       } else {
         const victim = game.remotes.get(data?.victimId);
@@ -469,9 +502,11 @@ async function ensureNet() {
           victim.rig.poof();
           later(() => victim.rig.unpoof(), 1600);
         }
+        audio.sfx.bladeKill();
         ui.toast(`${fromName} got a kill!`);
       }
     } else if (kind === 'bomb' && data?.pos) {
+      audio.sfx.bomb();
       applyBombWorld(data.pos, data.radius || 12, true);
     }
   });
@@ -540,8 +575,12 @@ ui.on('customize-change', ({ customization: c }) => {
 
 ui.on('select-disc', ({ type }) => {
   if (!game) return;
+  const slot = game.gc.bag.find((s) => s.type === type);
+  const usable = slot && (slot.charges === null || slot.charges > 0);
   game.gc.selectDisc(type);
   ui.hud.setBag(game.gc.bag);
+  if (usable && (type === 'blade' || type === 'bomb')) audio.sfx.power(type);
+  else if (usable) audio.sfx.click();
 });
 
 ui.on('back-to-menu', () => {
@@ -549,6 +588,7 @@ ui.on('back-to-menu', () => {
   destroyGame();
   uiMode = 'menu';
   ui.showMenu();
+  audio.playMusic('menu');
 });
 
 // ui.js's Customize button calls nav.toCustomize internally; track mode by
@@ -580,6 +620,15 @@ function frame() {
     game.courseScene.update(dt);
     game.effects.update(dt);
     followCam.update(dt);
+
+    // sustained "disc cutting through the air" ambience for your own throw
+    const ad = game.gc.activeDisc;
+    if (ad) {
+      audio.flightStart(ad.type);
+      audio.flightUpdate(ad.speed, ad.height);
+    } else {
+      audio.flightStop();
+    }
     if (game.multi) {
       updateRemotes(dt);
       game.standingsAcc += dt;
@@ -604,6 +653,8 @@ window.__DM = {
   get remotes() { return game ? game.remotes.size : -1; },
   get hole() { return game ? game.gc.holeIndex : -1; },
   get netId() { return net ? net.id : null; },
+  get audioState() { return audio.ctx ? audio.ctx.state : 'none'; },
+  get muted() { return audio.muted; },
 };
 
 console.log('%cDISC MAYHEM! ready', 'font-size:16px;font-weight:bold;color:#4dabf7');
