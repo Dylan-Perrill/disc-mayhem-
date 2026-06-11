@@ -1,0 +1,19 @@
+{
+  "name": "disc-mayhem",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cartoon disc golf mayhem - 18 holes, flick throws, blade & bomb discs, online multiplayer",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "start": "node server/index.js",
+    "app": "electron ."
+  },
+  "dependencies": {
+    "three": "^0.170.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "electron": "^42.4.0"
+  }
+}
