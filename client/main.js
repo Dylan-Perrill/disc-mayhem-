@@ -142,6 +142,12 @@ function scoreName(strokes, par) {
   return '+' + d;
 }
 
+// ms -> "m:ss" (matches ui/util.js fmtTime; kept local so main.js stays out of UI internals)
+function mmss(ms) {
+  const total = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+  return Math.floor(total / 60) + ':' + String(total % 60).padStart(2, '0');
+}
+
 function profileOf(id) {
   const p = lastRoom?.players?.find((pl) => pl.id === id);
   return { ...DEFAULT_CUSTOMIZATION, ...(p?.profile || {}) };
@@ -209,6 +215,7 @@ function startGame(seed, multi) {
     resultsShown: false,
     standingsAcc: 0,
     stateInterval: null,
+    pendingOwnScorecardHole: null, // holeIndex we just holed; shows our scorecard on the next S_SCORE
   };
 
   wireGameEvents();
@@ -290,6 +297,10 @@ function wireGameEvents() {
     game.soloCard.holes[holeIndex].strokes = strokes;
     if (game.multi && net) {
       net.sendHoleDone(holeIndex, strokes, timeMs);
+      // tell the others to banner this finish; remember to show OUR scorecard
+      // once the score round-trip reflects this hole.
+      net.sendEvent('holed', { holeIndex, strokes, timeMs });
+      game.pendingOwnScorecardHole = holeIndex;
     } else {
       ui.showScorecard(game.soloCard);
       later(() => ui.hideScorecard(), 1500);
@@ -508,16 +519,31 @@ async function ensureNet() {
     } else if (kind === 'bomb' && data?.pos) {
       audio.sfx.bomb();
       applyBombWorld(data.pos, data.radius || 12, true);
+    } else if (kind === 'holed' && data) {
+      // another player finished a hole — announce it (the scorecard is theirs alone).
+      // Same seeded course, so we know the par locally.
+      const par = game.course.holes[data.holeIndex]?.par;
+      const label = par != null ? scoreName(data.strokes, par) : `${data.strokes} strokes`;
+      ui.hud.showBanner(
+        `${fromName} — ${label} on hole ${data.holeIndex + 1} (${data.strokes} strokes, ${mmss(data.timeMs)})`
+      );
     }
   });
 
   client.on('score', ({ scores }) => {
     if (!game) return;
     game.scores = scores;
-    const card = multiScorecardData();
-    if (card) {
-      ui.showScorecard(card);
-      later(() => ui.hideScorecard(), 1800);
+    // Only the player who just holed sees the scorecard; others got a banner.
+    // Wait until the fresh scores actually reflect our hole so the card isn't stale.
+    const myId = net && net.id;
+    const pend = game.pendingOwnScorecardHole;
+    if (pend != null && myId && scores[myId]?.holes?.[pend]) {
+      game.pendingOwnScorecardHole = null;
+      const card = multiScorecardData();
+      if (card) {
+        ui.showScorecard(card);
+        later(() => ui.hideScorecard(), 1800);
+      }
     }
     maybeShowMultiResults();
   });

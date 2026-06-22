@@ -10,7 +10,7 @@ export const BASKET_HEIGHT = 1.3;       // chain height (m)
 // Player
 export const PLAYER_HEIGHT = 1.7;
 export const PLAYER_HIT_RADIUS = 0.9;   // blade-disc hit detection radius
-export const RUN_SPEED = 6;             // m/s auto-run to disc
+export const RUN_SPEED = 7.2;           // m/s auto-run to disc
 export const KILL_PENALTY_STROKES = 1;
 
 // Net

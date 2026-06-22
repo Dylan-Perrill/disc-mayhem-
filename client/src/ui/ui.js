@@ -45,6 +45,11 @@ export function createUI(root) {
 
   // ------------------------------------------------------------ layout
   root.classList.add('ui-root');
+  // Touch devices get the on-screen scorecard button and larger tap targets
+  // (CSS keys off this class); desktop keeps the keyboard/mouse affordances.
+  const isTouch = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)
+    || 'ontouchstart' in window;
+  root.classList.toggle('touch', isTouch);
   root.innerHTML = '';
 
   const toastLayer = el('div', 'toast-layer');
@@ -117,6 +122,15 @@ export function createUI(root) {
     if (e.key === 'Tab' && tabHeld) {
       tabHeld = false;
       scorecard.hide();
+    }
+  });
+
+  // Touch: the on-screen CARD button toggles the scorecard (no Tab key on phones).
+  hud.scorecardBtn.addEventListener('click', () => {
+    if (scorecard.isVisible()) {
+      scorecard.hide();
+    } else if (lastScorecardData) {
+      scorecard.show(lastScorecardData);
     }
   });
 

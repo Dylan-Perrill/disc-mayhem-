@@ -4,8 +4,13 @@
 
 const MIN_DRAG_PX = 30;     // total drags shorter than this cancel silently
 const SPEED_WINDOW_MS = 120; // power comes from the last ~120ms of movement
-const LAZY_SPEED = 0.5;     // px/ms -> power 0.3
-const FULL_SPEED = 3.5;     // px/ms -> power 1.0
+
+// Power calibration differs by input: a finger flick on a phone travels fewer
+// CSS pixels than a mouse swipe, so touch hits full power at a lower speed.
+const CALIBRATION = {
+  mouse: { lazy: 0.5, full: 3.5 },  // px/ms -> power 0.3 / 1.0
+  touch: { lazy: 0.4, full: 2.6 },
+};
 
 export class FlickInput {
   constructor(domElement) {
@@ -17,11 +22,15 @@ export class FlickInput {
     this._enabled = false;
     this._trail = null;       // [{x, y, t}] while dragging
     this._pointerId = null;
+    this._pointerType = 'mouse';
+    this._activePointers = new Set(); // every pointer currently down on the canvas
+    this._suppressed = false; // true while a 2nd finger steals the gesture for the camera
 
     this._down = this._down.bind(this);
     this._move = this._move.bind(this);
     this._up = this._up.bind(this);
     this._cancel = this._cancel.bind(this);
+    this._pointerGone = this._pointerGone.bind(this);
 
     domElement.addEventListener('pointerdown', this._down);
     domElement.addEventListener('pointermove', this._move);
@@ -35,7 +44,7 @@ export class FlickInput {
 
   disable() {
     this._enabled = false;
-    if (this._trail) this._cancel();
+    if (this._trail) this._abortFlick();
   }
 
   dispose() {
@@ -46,9 +55,22 @@ export class FlickInput {
   }
 
   _down(e) {
-    if (!this._enabled || e.button !== 0) return; // left button only
+    if (!this._enabled || e.button !== 0) return; // left button / primary touch only
+    this._activePointers.add(e.pointerId);
+
+    // A 2nd finger means the player is reaching for the camera (two-finger
+    // orbit / pinch). Hand the gesture off: kill any in-progress flick and stay
+    // suppressed until every finger lifts.
+    if (this._activePointers.size >= 2) {
+      this._suppressed = true;
+      if (this._trail) this._abortFlick();
+      return;
+    }
+    if (this._suppressed) return;
+
     e.preventDefault();
     this._pointerId = e.pointerId;
+    this._pointerType = e.pointerType || 'mouse';
     this.dom.setPointerCapture?.(e.pointerId);
     this._trail = [{ x: e.clientX, y: e.clientY, t: performance.now() }];
   }
@@ -62,6 +84,7 @@ export class FlickInput {
   }
 
   _up(e) {
+    this._pointerGone(e);
     if (!this._trail || e.pointerId !== this._pointerId) return;
     this._trail.push({ x: e.clientX, y: e.clientY, t: performance.now() });
     const trail = this._trail;
@@ -78,7 +101,23 @@ export class FlickInput {
     if (est && est.power > 0.02) this.onThrow(est);
   }
 
-  _cancel() {
+  _cancel(e) {
+    this._pointerGone(e);
+    if (e && e.pointerId !== this._pointerId) return;
+    this._abortFlick();
+  }
+
+  // Remove a lifted/cancelled pointer from the active set; once the screen is
+  // clear of fingers, allow flicks again.
+  _pointerGone(e) {
+    if (!e) return;
+    this._activePointers.delete(e.pointerId);
+    if (this._activePointers.size === 0) this._suppressed = false;
+  }
+
+  // Drop the current flick without throwing (no event arg needed).
+  _abortFlick() {
+    if (this._pointerId != null) this.dom.releasePointerCapture?.(this._pointerId);
     this._trail = null;
     this._pointerId = null;
     this.onAim({ active: false, dirAngle: 0, power: 0, curve: 0 });
@@ -99,9 +138,10 @@ export class FlickInput {
     const speed = Math.hypot(vx, vy);
     if (speed < 0.02) return null;
 
+    const cal = CALIBRATION[this._pointerType] || CALIBRATION.mouse;
     const power = Math.min(
       1,
-      Math.max(0.05, 0.3 + ((speed - LAZY_SPEED) * 0.7) / (FULL_SPEED - LAZY_SPEED))
+      Math.max(0.05, 0.3 + ((speed - cal.lazy) * 0.7) / (cal.full - cal.lazy))
     );
 
     // --- direction: screen-up = camera forward, rotated by baseAngle ---

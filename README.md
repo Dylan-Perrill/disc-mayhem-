@@ -29,6 +29,10 @@ npm run app
 | 1–5 | Select disc |
 | Tab (hold) | Scorecard |
 
+**On a phone/tablet** (open the server's URL in a mobile browser): **one-finger
+flick** to throw, **two-finger drag** to look around, **pinch** to zoom, **tap** a
+disc to select it, and tap the **CARD** button for the scorecard.
+
 - **Format:** simultaneous race golf. Lowest strokes wins; ties broken by
   total time — so both your flick speed **and** the clock matter.
 - **Discs:** Driver (long, S-curves), Midrange, Putter, plus per-round

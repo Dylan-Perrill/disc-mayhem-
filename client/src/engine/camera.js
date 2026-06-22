@@ -8,6 +8,10 @@ const PITCH_MAX = 0.9;
 const ZOOM_MIN = 4;
 const ZOOM_MAX = 30;
 
+const ORBIT_YAW_SENS = 0.005;   // rad per px of horizontal drag (mouse + 2-finger)
+const ORBIT_PITCH_SENS = 0.004; // rad per px of vertical drag
+const PINCH_ZOOM_SENS = 0.03;   // m per px of finger-spread change
+
 export class FollowCamera {
   constructor(camera, domElement) {
     this.camera = camera;
@@ -34,30 +38,57 @@ export class FollowCamera {
 
     this._yaw = 0;
 
-    // ---- right-drag orbit + wheel zoom ----
+    // ---- right-drag orbit + wheel zoom (mouse), two-finger orbit + pinch (touch) ----
     this._dragging = false;
     this._lastX = 0;
     this._lastY = 0;
 
+    this._touches = new Map();   // pointerId -> {x, y}, touch pointers only
+    this._pinchPrevDist = 0;     // finger spread last frame (0 = needs reset)
+    this._pinchPrevCx = 0;       // two-finger centroid last frame
+    this._pinchPrevCy = 0;
+
     domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+
     domElement.addEventListener('pointerdown', (e) => {
-      if (e.button !== 2) return;
+      if (e.pointerType === 'touch') {
+        this._touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        this._pinchPrevDist = 0; // recompute baseline on the next move
+        return;
+      }
+      if (e.button !== 2) return; // mouse: right-drag orbit
       this._dragging = true;
       this._lastX = e.clientX;
       this._lastY = e.clientY;
     });
+
     window.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'touch') {
+        if (!this._touches.has(e.pointerId)) return;
+        this._touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        this._updatePinch();
+        return;
+      }
       if (!this._dragging) return;
       const dx = e.clientX - this._lastX;
       const dy = e.clientY - this._lastY;
       this._lastX = e.clientX;
       this._lastY = e.clientY;
-      this._orbitYaw -= dx * 0.005;
-      this._pitch = Math.min(PITCH_MAX, Math.max(PITCH_MIN, this._pitch + dy * 0.004));
+      this._orbitYaw -= dx * ORBIT_YAW_SENS;
+      this._pitch = Math.min(PITCH_MAX, Math.max(PITCH_MIN, this._pitch + dy * ORBIT_PITCH_SENS));
     });
-    window.addEventListener('pointerup', (e) => {
+
+    const endPointer = (e) => {
+      if (e.pointerType === 'touch') {
+        this._touches.delete(e.pointerId);
+        this._pinchPrevDist = 0; // reset so a lifted finger doesn't cause a jump
+        return;
+      }
       if (e.button === 2) this._dragging = false;
-    });
+    };
+    window.addEventListener('pointerup', endPointer);
+    window.addEventListener('pointercancel', endPointer);
+
     domElement.addEventListener(
       'wheel',
       (e) => {
@@ -66,6 +97,40 @@ export class FollowCamera {
       },
       { passive: false }
     );
+  }
+
+  // Two-finger gesture: drag the centroid to orbit, change the spread to zoom.
+  _updatePinch() {
+    if (this._touches.size !== 2) return;
+    const pts = [...this._touches.values()];
+    const cx = (pts[0].x + pts[1].x) / 2;
+    const cy = (pts[0].y + pts[1].y) / 2;
+    const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+
+    if (this._pinchPrevDist === 0) {
+      // first frame with two fingers down — establish baseline, no movement
+      this._pinchPrevDist = dist;
+      this._pinchPrevCx = cx;
+      this._pinchPrevCy = cy;
+      return;
+    }
+
+    // orbit from centroid travel
+    this._orbitYaw -= (cx - this._pinchPrevCx) * ORBIT_YAW_SENS;
+    this._pitch = Math.min(
+      PITCH_MAX,
+      Math.max(PITCH_MIN, this._pitch + (cy - this._pinchPrevCy) * ORBIT_PITCH_SENS)
+    );
+
+    // zoom from spread: fingers apart -> zoom in (smaller distance)
+    this._dist = Math.min(
+      ZOOM_MAX,
+      Math.max(ZOOM_MIN, this._dist - (dist - this._pinchPrevDist) * PINCH_ZOOM_SENS)
+    );
+
+    this._pinchPrevDist = dist;
+    this._pinchPrevCx = cx;
+    this._pinchPrevCy = cy;
   }
 
   get yaw() {

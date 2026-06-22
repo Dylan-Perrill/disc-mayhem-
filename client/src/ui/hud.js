@@ -42,10 +42,22 @@ export function createHUD(emit) {
   // ---- center: big pop messages ----
   const msgLayer = el('div', 'hud-msg-layer');
 
-  screen.append(holePanel, timerPanel, rightStack, powerWrap, bagEl, msgLayer);
+  // ---- top-center banner: another player finished a hole ----
+  const bannerEl = el('div', 'hud-banner hidden');
+
+  // ---- touch-only: scorecard toggle (replaces the Tab-hold on desktop) ----
+  const scorecardBtn = el('button', 'scorecard-btn touch-only', 'CARD');
+
+  // The three readouts share a wrapper so phones can lay them out as one tidy
+  // top bar (display:contents on desktop keeps their original absolute spots).
+  const topbar = el('div', 'hud-topbar');
+  topbar.append(holePanel, timerPanel, rightStack);
+
+  screen.append(topbar, powerWrap, bagEl, msgLayer, bannerEl, scorecardBtn);
 
   // ------------------------------------------------------------ bag
   let bag = [];
+  let bannerTimer = null;
 
   function renderBag() {
     bagEl.innerHTML = '';
@@ -149,11 +161,24 @@ export function createHUD(emit) {
     setStandings(rows) {
       renderStandings(rows);
     },
+    // Top-center announcement that another player finished a hole. Only one
+    // shows at a time — a new call replaces whatever was on screen.
+    showBanner(text, ms = 2500) {
+      clearTimeout(bannerTimer);
+      bannerEl.textContent = String(text);
+      bannerEl.classList.remove('hidden');
+      // restart the drop-in animation even if the banner was already visible
+      bannerEl.style.animation = 'none';
+      void bannerEl.offsetWidth; // force reflow
+      bannerEl.style.animation = '';
+      bannerTimer = setTimeout(() => bannerEl.classList.add('hidden'), Math.max(300, Number(ms) || 2500));
+    },
   };
 
   return {
     el: screen,
     api,
+    scorecardBtn,
     getSlotType(i) {
       const slot = bag[i];
       return slot && slot.type ? slot.type : null;
