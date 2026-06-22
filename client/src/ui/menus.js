@@ -9,6 +9,10 @@ const HINT_TEXT =
   'Hold LEFT mouse + FLICK to throw - flick speed = power, curve your flick ' +
   'to bend the shot. RIGHT drag = look, wheel = zoom, 1-5 discs, Tab = scorecard';
 
+const HINT_TEXT_TOUCH =
+  'One-finger FLICK to throw - flick speed = power, curve your flick to bend ' +
+  'the shot. Two-finger drag = look, pinch = zoom, tap a disc, CARD = scorecard';
+
 // ---------------------------------------------------------------- MENU
 
 export function createMenuScreen(emit, nav) {
@@ -70,9 +74,11 @@ export function createMenuScreen(emit, nav) {
 
   buttons.append(soloBtn, hostBtn, joinBtn, joinRow, customizeBtn);
 
-  const footer = el('div', 'menu-footer', HINT_TEXT);
+  // Two hints; CSS shows the mouse one on desktop and the touch one on phones.
+  const footer = el('div', 'menu-footer menu-footer-mouse', HINT_TEXT);
+  const footerTouch = el('div', 'menu-footer menu-footer-touch', HINT_TEXT_TOUCH);
 
-  screen.append(title, buttons, footer);
+  screen.append(title, buttons, footer, footerTouch);
   return { el: screen };
 }
 

@@ -865,6 +865,11 @@ canvas#game {
 .touch-only { display: none; }
 .ui-root.touch .touch-only { display: flex; }
 
+/* Menu control hint: mouse text on desktop, touch text on phones/tablets. */
+.menu-footer-touch { display: none; }
+.ui-root.touch .menu-footer-mouse { display: none; }
+.ui-root.touch .menu-footer-touch { display: block; }
+
 .scorecard-btn {
   position: absolute;
   right: 16px;
@@ -891,9 +896,7 @@ canvas#game {
 
 /* ------------------------------------------------------- small screens */
 @media (max-width: 760px) {
-  .cust-panel { width: 44vw; padding: 14px; }
   .btn-big { min-width: 240px; font-size: 22px; }
-  .room-code { letter-spacing: 12px; padding-left: 20px; }
 
   /* ---- HUD top bar: one tidy row instead of three colliding panels ---- */
   .hud-topbar {
@@ -950,4 +953,61 @@ canvas#game {
     transform: scale(1.1);
     transform-origin: bottom left;
   }
+
+  /* ---- MENU: shrink the title to fit, fit the hint pill above the safe area ---- */
+  .game-title { font-size: clamp(36px, 13vw, 80px); }
+  .menu-buttons { gap: 12px; }
+  .menu-footer {
+    font-size: 12px;
+    line-height: 1.3;
+    border-radius: 16px;
+    max-width: 92vw;
+    padding: 7px 16px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+  }
+  .code-input { width: 130px; font-size: 26px; letter-spacing: 8px; }
+
+  /* ---- CUSTOMIZE: stack the two panels as a bottom sheet so the character
+     stays visible up top; each panel scrolls on its own ---- */
+  .screen-customize {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-end;
+    gap: 10px;
+    padding:
+      calc(env(safe-area-inset-top, 0px) + 12px)
+      calc(env(safe-area-inset-right, 0px) + 12px)
+      calc(env(safe-area-inset-bottom, 0px) + 12px)
+      calc(env(safe-area-inset-left, 0px) + 12px);
+  }
+  .cust-panel { width: auto; max-height: 38vh; padding: 14px 16px; gap: 12px; }
+  .cust-title { font-size: 24px; }
+  .cust-section { gap: 8px; }
+  .name-input { font-size: 20px; }
+
+  /* ---- LOBBY: tighter panel, smaller code, safe-area aware ---- */
+  .screen-lobby { padding: env(safe-area-inset-top, 0px) 10px env(safe-area-inset-bottom, 0px); }
+  .lobby-panel { padding: 20px 18px; gap: 10px; min-width: 0; width: min(520px, 94vw); }
+  .lobby-title { font-size: 26px; letter-spacing: 2px; }
+  .room-code { font-size: clamp(44px, 13vw, 72px); letter-spacing: 12px; padding-left: 20px; }
+  .player-list { max-height: 42vh; }
+  .player-row { font-size: 18px; padding: 7px 12px; }
+
+  /* ---- RESULTS: tighter podium + list, safe-area aware ---- */
+  .screen-results {
+    gap: 16px;
+    padding: calc(env(safe-area-inset-top, 0px) + 8px) 10px calc(env(safe-area-inset-bottom, 0px) + 8px);
+  }
+  .podium { gap: 8px; }
+  .podium-name { font-size: 18px; }
+  .podium-score { font-size: 14px; }
+  .results-list { width: min(560px, 94vw); max-height: 24vh; }
+  .results-row { font-size: 16px; padding: 6px 12px; gap: 10px; }
+
+  /* ---- SCORECARD: let touch users scroll the 18-hole table, shrink type ---- */
+  .ui-root.touch .scorecard-panel { pointer-events: auto; }
+  .scorecard-panel { padding: 16px 16px; }
+  .scorecard-title { font-size: 22px; }
+  .scorecard-table { font-size: 13px; }
+  .scorecard-table th, .scorecard-table td { padding: 4px 6px; min-width: 24px; }
 }
