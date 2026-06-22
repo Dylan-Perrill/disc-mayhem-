@@ -319,6 +319,61 @@ function makeSignTexture(num, par) {
   return tex;
 }
 
+// Red pennant-on-a-pole, drawn into a transparent canvas — used for the floating
+// "throw here" flag sprite above the active basket.
+function makeFlagTexture() {
+  const cv = document.createElement('canvas');
+  cv.width = 128;
+  cv.height = 128;
+  const ctx = cv.getContext('2d');
+
+  // pole
+  ctx.fillStyle = '#f3f4f8';
+  ctx.fillRect(40, 14, 8, 104);
+  ctx.fillStyle = '#c9ccd6';
+  ctx.fillRect(46, 14, 2, 104);
+  // knob on top
+  ctx.beginPath();
+  ctx.arc(44, 14, 8, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffd93d';
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#1d2233';
+  ctx.stroke();
+  // pennant
+  ctx.beginPath();
+  ctx.moveTo(48, 20);
+  ctx.lineTo(116, 38);
+  ctx.lineTo(48, 56);
+  ctx.closePath();
+  ctx.fillStyle = '#ff3b30';
+  ctx.fill();
+  ctx.lineWidth = 4;
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#1d2233';
+  ctx.stroke();
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Draw distance text ("142 m") into an existing canvas/texture so the label can be
+// updated cheaply in place.
+function drawDistanceLabel(ctx, tex, text) {
+  ctx.clearRect(0, 0, 256, 96);
+  ctx.font = 'bold 56px "Trebuchet MS", Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 10;
+  ctx.strokeStyle = 'rgba(15, 18, 30, 0.95)';
+  ctx.strokeText(text, 128, 50);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(text, 128, 50);
+  tex.needsUpdate = true;
+}
+
 function buildTeePad(hole) {
   const g = new THREE.Group();
   const pad = new THREE.Mesh(
@@ -404,6 +459,53 @@ export function buildCourseScene(course) {
   teeGlow.visible = false;
   group.add(teeGlow);
 
+  // ---- floating "throw here" marker over the active basket ----------------
+  // Tall light beam so the target is findable at distance, plus a flag + distance
+  // label drawn always-on-top (depthTest off) so they show through hills/trees.
+  const BEAM_H = 12;
+  const beam = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.18, 0.42, BEAM_H, 12, 1, true),
+    new THREE.MeshBasicMaterial({
+      color: 0xffd93d,
+      transparent: true,
+      opacity: 0.32,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    })
+  );
+  beam.visible = false;
+  group.add(beam);
+
+  const flagSprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: makeFlagTexture(),
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+    })
+  );
+  flagSprite.scale.set(3.2, 3.2, 1);
+  flagSprite.renderOrder = 999;
+  flagSprite.visible = false;
+  group.add(flagSprite);
+
+  const distCanvas = document.createElement('canvas');
+  distCanvas.width = 256;
+  distCanvas.height = 96;
+  const distCtx = distCanvas.getContext('2d');
+  const distTex = new THREE.CanvasTexture(distCanvas);
+  distTex.colorSpace = THREE.SRGBColorSpace;
+  const distSprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: distTex, transparent: true, depthTest: false, depthWrite: false })
+  );
+  distSprite.scale.set(4.2, 1.6, 1);
+  distSprite.renderOrder = 1000;
+  distSprite.visible = false;
+  group.add(distSprite);
+
+  let shownDist = -1; // last rendered metre value (avoids per-frame canvas redraws)
+
   let pulseT = 0;
 
   // treeMeshes contract: per-tree handles (instanced — exposes placement info)
@@ -419,12 +521,38 @@ export function buildCourseScene(course) {
       if (!hole) {
         ring.visible = false;
         teeGlow.visible = false;
+        beam.visible = false;
+        flagSprite.visible = false;
+        distSprite.visible = false;
         return;
       }
+      const b = hole.basket;
       ring.visible = true;
-      ring.position.set(hole.basket.x, hole.basket.y + 0.25, hole.basket.z);
+      ring.position.set(b.x, b.y + 0.25, b.z);
       teeGlow.visible = true;
       teeGlow.position.set(hole.tee.x, hole.tee.y + 0.18, hole.tee.z);
+
+      beam.visible = true;
+      beam.position.set(b.x, b.y + BEAM_H / 2, b.z);
+      flagSprite.visible = true;
+      flagSprite.position.set(b.x, b.y + BEAM_H + 0.4, b.z);
+      // a new value forces a redraw on the next setTargetDistance call
+      shownDist = -1;
+    },
+
+    // Live distance (m) from the player to the active basket, shown on the marker.
+    // Pass null/undefined to hide the readout.
+    setTargetDistance(meters) {
+      if (meters == null || !flagSprite.visible) {
+        distSprite.visible = false;
+        return;
+      }
+      const m = Math.round(meters);
+      distSprite.visible = true;
+      if (m !== shownDist) {
+        shownDist = m;
+        drawDistanceLabel(distCtx, distTex, m + ' m');
+      }
     },
 
     setTreeFlattened(treeId, flattened) {
@@ -438,6 +566,12 @@ export function buildCourseScene(course) {
         const s = 1 + 0.14 * Math.sin(pulseT * 4.5);
         ring.scale.set(s, s, 1);
         ring.material.opacity = 0.65 + 0.3 * Math.sin(pulseT * 4.5 + 1);
+      }
+      if (beam.visible) {
+        beam.material.opacity = 0.24 + 0.12 * Math.sin(pulseT * 3);
+        const bob = 0.25 * Math.sin(pulseT * 2.2);
+        flagSprite.position.y = beam.position.y + BEAM_H / 2 + 0.4 + bob;
+        distSprite.position.set(flagSprite.position.x, flagSprite.position.y - 2.0, flagSprite.position.z);
       }
       for (let i = 0; i < waterMeshes.length; i++) {
         waterMeshes[i].material.opacity = 0.58 + 0.07 * Math.sin(pulseT * 1.6 + i * 1.7);

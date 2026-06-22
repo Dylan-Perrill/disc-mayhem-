@@ -76,6 +76,8 @@ export class GameController extends Emitter {
     if (i >= HOLE_COUNT) {
       this._state = 'done';
       this.input.disable();
+      this.courseScene.setHoleHighlight(-1); // clear the basket marker
+      this.courseScene.setTargetDistance(null);
       this.emit('round-complete', { scorecard: this.scorecard });
       return;
     }
@@ -228,6 +230,13 @@ export class GameController extends Emitter {
     this.rig.update(dt);
     if (this._discVisual) this._discVisual.update(dt, this._disc);
     this.input.baseAngle = this.camera.yaw;
+
+    // live distance to the basket for the floating target marker
+    if (this._state !== 'done' && this.hole) {
+      const b = this.hole.basket;
+      const p = this.rig.group.position;
+      this.courseScene.setTargetDistance(Math.hypot(b.x - p.x, b.z - p.z));
+    }
 
     switch (this._state) {
       case 'aiming': {
