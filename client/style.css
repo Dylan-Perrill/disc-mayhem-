@@ -827,6 +827,22 @@ canvas#game {
 .res-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .res-strokes, .res-time { font-variant-numeric: tabular-nums; }
 
+/* full scorecard embedded in the results screen */
+.results-scorecard {
+  padding: 14px 18px;
+  max-width: 94vw;
+  max-height: 34vh;
+  overflow-y: auto;
+}
+.results-scorecard-title {
+  margin: 0 0 10px;
+  text-align: center;
+  font-size: 18px;
+  letter-spacing: 3px;
+  color: var(--accent);
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.5);
+}
+
 /* =============================================================== TOASTS */
 .toast-layer {
   position: absolute;

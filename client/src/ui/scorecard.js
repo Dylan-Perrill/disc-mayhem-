@@ -48,59 +48,65 @@ function sum(arr) {
   return any ? t : null;
 }
 
+// Builds the hole-by-hole table (HOLE / PAR / each player) wrapped in a
+// horizontal scroller. Shared by the in-game scorecard overlay and the
+// end-of-round results screen.
+export function buildScorecardTable(data) {
+  const { pars, players, n } = normalize(data);
+  const table = el('table', 'scorecard-table');
+
+  // header: HOLE 1..n TOT
+  const head = el('tr', 'sc-head');
+  head.append(el('th', 'sc-corner', 'HOLE'));
+  for (let i = 0; i < n; i++) head.append(el('th', null, String(i + 1)));
+  head.append(el('th', 'sc-tot', 'TOT'));
+  table.append(head);
+
+  // par row
+  const parRow = el('tr', 'sc-par-row');
+  parRow.append(el('td', 'sc-rowname', 'PAR'));
+  for (let i = 0; i < n; i++) {
+    parRow.append(el('td', null, pars[i] != null ? String(pars[i]) : '-'));
+  }
+  const parTot = sum(pars);
+  parRow.append(el('td', 'sc-tot', parTot != null ? String(parTot) : '-'));
+  table.append(parRow);
+
+  // player rows
+  for (const p of players) {
+    const tr = el('tr', 'sc-player-row');
+    if (p.you) tr.classList.add('sc-you');
+    tr.append(el('td', 'sc-rowname', p.name));
+    for (let i = 0; i < n; i++) {
+      const s = p.strokes[i];
+      const td = el('td', null, s != null ? String(s) : '');
+      const par = pars[i];
+      if (s != null && par != null) {
+        if (s < par) td.classList.add('sc-under');
+        else if (s > par) td.classList.add('sc-over');
+        else td.classList.add('sc-even');
+      }
+      tr.append(td);
+    }
+    const tot = sum(p.strokes);
+    tr.append(el('td', 'sc-tot', tot != null ? String(tot) : ''));
+    table.append(tr);
+  }
+
+  const scroller = el('div', 'scorecard-scroll');
+  scroller.append(table);
+  return scroller;
+}
+
 export function createScorecard() {
   const overlay = el('div', 'scorecard-overlay');
   const panel = el('div', 'panel scorecard-panel');
   overlay.append(panel);
 
   function render(data) {
-    const { pars, players, n } = normalize(data);
     panel.innerHTML = '';
     panel.append(el('h2', 'scorecard-title', 'SCORECARD'));
-
-    const table = el('table', 'scorecard-table');
-
-    // header: HOLE 1..n TOT
-    const head = el('tr', 'sc-head');
-    head.append(el('th', 'sc-corner', 'HOLE'));
-    for (let i = 0; i < n; i++) head.append(el('th', null, String(i + 1)));
-    head.append(el('th', 'sc-tot', 'TOT'));
-    table.append(head);
-
-    // par row
-    const parRow = el('tr', 'sc-par-row');
-    parRow.append(el('td', 'sc-rowname', 'PAR'));
-    for (let i = 0; i < n; i++) {
-      parRow.append(el('td', null, pars[i] != null ? String(pars[i]) : '-'));
-    }
-    const parTot = sum(pars);
-    parRow.append(el('td', 'sc-tot', parTot != null ? String(parTot) : '-'));
-    table.append(parRow);
-
-    // player rows
-    for (const p of players) {
-      const tr = el('tr', 'sc-player-row');
-      if (p.you) tr.classList.add('sc-you');
-      tr.append(el('td', 'sc-rowname', p.name));
-      for (let i = 0; i < n; i++) {
-        const s = p.strokes[i];
-        const td = el('td', null, s != null ? String(s) : '');
-        const par = pars[i];
-        if (s != null && par != null) {
-          if (s < par) td.classList.add('sc-under');
-          else if (s > par) td.classList.add('sc-over');
-          else td.classList.add('sc-even');
-        }
-        tr.append(td);
-      }
-      const tot = sum(p.strokes);
-      tr.append(el('td', 'sc-tot', tot != null ? String(tot) : ''));
-      table.append(tr);
-    }
-
-    const scroller = el('div', 'scorecard-scroll');
-    scroller.append(table);
-    panel.append(scroller);
+    panel.append(buildScorecardTable(data));
   }
 
   return {
@@ -121,7 +127,7 @@ export function createScorecard() {
 export function createResults(emit, nav) {
   const screen = el('div', 'screen screen-solid screen-results');
 
-  function render(standings) {
+  function render(standings, scorecardData) {
     screen.innerHTML = '';
     screen.append(el('h1', 'results-title', 'FINAL RESULTS'));
 
@@ -172,6 +178,14 @@ export function createResults(emit, nav) {
       screen.append(list);
     }
 
+    // full hole-by-hole scorecard under the standings
+    if (scorecardData) {
+      const card = el('div', 'panel results-scorecard');
+      card.append(el('h2', 'results-scorecard-title', 'SCORECARD'));
+      card.append(buildScorecardTable(scorecardData));
+      screen.append(card);
+    }
+
     const backBtn = el('button', 'btn btn-big', 'Back to Menu');
     backBtn.addEventListener('click', () => {
       nav.toMenu();
@@ -182,8 +196,8 @@ export function createResults(emit, nav) {
 
   return {
     el: screen,
-    show(standings) {
-      render(standings);
+    show(standings, scorecardData) {
+      render(standings, scorecardData);
     },
   };
 }

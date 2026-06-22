@@ -168,8 +168,8 @@ export function createUI(root) {
       tabHeld = false;
       scorecard.hide();
     },
-    showResults(standings) {
-      results.show(standings);
+    showResults(standings, scorecardData) {
+      results.show(standings, scorecardData);
       show('results');
     },
     toast,

@@ -314,9 +314,10 @@ function wireGameEvents() {
       const totalTimeMs = scorecard.reduce((a, h) => a + (h?.timeMs || 0), 0);
       uiMode = 'results';
       audio.playMusic('menu');
-      ui.showResults([
-        { rank: 1, name: customization.name, totalStrokes, totalTimeMs, you: true },
-      ]);
+      ui.showResults(
+        [{ rank: 1, name: customization.name, totalStrokes, totalTimeMs, you: true }],
+        game.soloCard,
+      );
     } else {
       ui.hud.showMessage('ROUND DONE! Waiting for others…', 2500);
       maybeShowMultiResults();
@@ -452,7 +453,7 @@ function maybeShowMultiResults() {
   sorted.forEach((r, i) => (r.rank = i + 1));
   uiMode = 'results';
   audio.playMusic('menu');
-  ui.showResults(sorted);
+  ui.showResults(sorted, multiScorecardData());
 }
 
 // ----------------------------------------------------------- networking
